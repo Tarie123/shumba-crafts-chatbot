@@ -21,15 +21,14 @@ const app = express();
 app.use(express.json());
 
 // ---------- Config ----------
-const {
-  VERIFY_TOKEN, // arbitrary string you choose, used in Meta webhook setup
-  WHATSAPP_TOKEN, // permanent access token from Meta App
-  PHONE_NUMBER_ID, // from WhatsApp > API Setup in Meta dashboard
-  AGENT_WHATSAPP_NUMBER, // staff number to forward handoffs to, e.g. 263772337808
-  PORT = 3000,
-} = process.env;
+// All variable names now match Railway environment variable names exactly.
+const WHATSAPP_VERIFY_TOKEN  = process.env.WHATSAPP_VERIFY_TOKEN;  // e.g. shumbacrafts2024
+const WHATSAPP_ACCESS_TOKEN  = process.env.WHATSAPP_ACCESS_TOKEN;  // permanent token from Meta
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID; // from Meta API Setup
+const AGENT_WHATSAPP_NUMBER  = process.env.AGENT_WHATSAPP_NUMBER;  // e.g. 263772337808
+const PORT                   = process.env.PORT || 3000;
 
-const GRAPH_API = `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`;
+const GRAPH_API = `https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
 // ---------- In-memory session store ----------
 // For production, swap this Map for Redis (see README).
@@ -47,7 +46,6 @@ const BUSINESS = {
   tagline: "Heritage in Wood — Handmade in Zimbabwe, Est. 2018",
   location: "Harare, Zimbabwe",
   hours: "Mon–Sat, 8:00 AM – 5:00 PM (Africa/Harare, CAT)",
-  agentNumber: AGENT_WHATSAPP_NUMBER,
   facebook: "https://www.facebook.com/profile.php?id=100063900227062",
   channel: "https://whatsapp.com/channel/0029VbAwgHb42DcX8PL6MI0n",
   categories: {
@@ -79,7 +77,7 @@ async function sendRequest(payload) {
   try {
     await axios.post(GRAPH_API, payload, {
       headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
         "Content-Type": "application/json",
       },
     });
@@ -114,12 +112,12 @@ async function sendMainMenu(to) {
           {
             title: "Shumba Crafts",
             rows: [
-              { id: "collection", title: "🖼️ Browse Collection", description: "Wood, stone, metal & pottery" },
-              { id: "commission", title: "✍️ Commission a Piece", description: "Custom size, wood & subject" },
-              { id: "shipping", title: "🚚 Shipping & Delivery", description: "Rates and timelines" },
-              { id: "payment", title: "💳 Payment Options", description: "How to pay" },
-              { id: "hours", title: "📍 Hours & Location", description: "Where & when to find us" },
-              { id: "agent", title: "🙋 Talk to a Human", description: "Connect with our team" },
+              { id: "collection",  title: "🖼️ Browse Collection",    description: "Wood, stone, metal & pottery" },
+              { id: "commission",  title: "✍️ Commission a Piece",    description: "Custom size, wood & subject" },
+              { id: "shipping",    title: "🚚 Shipping & Delivery",   description: "Rates and timelines" },
+              { id: "payment",     title: "💳 Payment Options",       description: "How to pay" },
+              { id: "hours",       title: "📍 Hours & Location",      description: "Where & when to find us" },
+              { id: "agent",       title: "🙋 Talk to a Human",       description: "Connect with our team" },
             ],
           },
         ],
@@ -144,11 +142,11 @@ async function sendCollectionMenu(to) {
           {
             title: "Categories",
             rows: [
-              { id: "cat_wood", title: BUSINESS.categories.wood.label },
+              { id: "cat_wood",      title: BUSINESS.categories.wood.label },
               { id: "cat_sculpture", title: BUSINESS.categories.sculpture.label },
               { id: "cat_metalwork", title: BUSINESS.categories.metalwork.label },
-              { id: "cat_pottery", title: BUSINESS.categories.pottery.label },
-              { id: "menu", title: "⬅️ Back to Main Menu" },
+              { id: "cat_pottery",   title: BUSINESS.categories.pottery.label },
+              { id: "menu",          title: "⬅️ Back to Main Menu" },
             ],
           },
         ],
@@ -173,7 +171,7 @@ async function handleMenuSelection(from, id) {
       const cat = BUSINESS.categories[key];
       await sendText(
         from,
-        `${cat.label}\n\n${cat.text}\n\nSee photos and prices, or enquire about a specific piece, on our full catalog:\nhttps://shumbacrafts.co.zw/#collection\n\nWant to commission something similar? Reply "commission".`
+        `${cat.label}\n\n${cat.text}\n\nSee photos and prices on our full catalog:\nhttps://shumbacrafts.co.zw/#collection\n\nWant to commission something similar? Reply "commission".`
       );
       break;
     }
@@ -224,9 +222,9 @@ async function routeToAgent(from) {
     "Connecting you with our team — someone will reply here shortly. In the meantime, feel free to describe what you're looking for."
   );
   getSession(from).stage = "with_agent";
-  if (BUSINESS.agentNumber) {
+  if (AGENT_WHATSAPP_NUMBER) {
     await sendText(
-      `${BUSINESS.agentNumber}`,
+      AGENT_WHATSAPP_NUMBER,
       `🔔 New customer handoff request from ${from}. Please reply to them directly on WhatsApp.`
     );
   }
@@ -235,45 +233,50 @@ async function routeToAgent(from) {
 // Simple keyword fallback for free-text messages
 function matchKeyword(text) {
   const t = text.toLowerCase();
-  if (/(wood|carv|ironwood|jacaranda|mopane|kist|table)/.test(t)) return "cat_wood";
-  if (/(stone|sculpt|hippo|serpentine)/.test(t)) return "cat_sculpture";
-  if (/(metal|steel|zebra|rooster|bird|iron bloom)/.test(t)) return "cat_metalwork";
-  if (/(pottery|clay|vase|tea set|ceramic)/.test(t)) return "cat_pottery";
-  if (/(commission|custom|bespoke|order)/.test(t)) return "commission";
-  if (/(ship|deliver|courier)/.test(t)) return "shipping";
-  if (/(pay|price|cost|how much)/.test(t)) return "payment";
-  if (/(hour|open|location|address|where)/.test(t)) return "hours";
-  if (/(agent|human|staff|person|talk to someone)/.test(t)) return "agent";
-  if (/(menu|hi|hello|hey|start)/.test(t)) return "menu";
+  if (/(wood|carv|ironwood|jacaranda|mopane|kist|table)/.test(t))          return "cat_wood";
+  if (/(stone|sculpt|hippo|serpentine)/.test(t))                            return "cat_sculpture";
+  if (/(metal|steel|zebra|rooster|bird|iron bloom)/.test(t))               return "cat_metalwork";
+  if (/(pottery|clay|vase|tea set|ceramic)/.test(t))                       return "cat_pottery";
+  if (/(commission|custom|bespoke|order)/.test(t))                         return "commission";
+  if (/(ship|deliver|courier)/.test(t))                                    return "shipping";
+  if (/(pay|price|cost|how much)/.test(t))                                 return "payment";
+  if (/(hour|open|location|address|where)/.test(t))                        return "hours";
+  if (/(agent|human|staff|person|talk to someone)/.test(t))                return "agent";
+  if (/(menu|hi|hello|hey|start)/.test(t))                                 return "menu";
   return null;
 }
 
 // ---------- Webhook verification (GET) ----------
+// Meta calls this when you click "Verify and save" in the dashboard.
 app.get("/webhook", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
+  const mode      = req.query["hub.mode"];
+  const token     = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
+    console.log("Webhook verified successfully.");
     return res.status(200).send(challenge);
   }
+  console.warn("Webhook verification failed. Token mismatch.");
   return res.sendStatus(403);
 });
 
 // ---------- Webhook receiver (POST) ----------
+// Meta sends all incoming messages here.
 app.post("/webhook", async (req, res) => {
-  res.sendStatus(200); // acknowledge immediately, Meta requires <5s response
+  res.sendStatus(200); // acknowledge immediately — Meta requires <5s response
 
   try {
-    const entry = req.body.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
+    const entry   = req.body.entry?.[0];
+    const change  = entry?.changes?.[0];
+    const value   = change?.value;
     const message = value?.messages?.[0];
-    if (!message) return; // e.g. delivery/read receipts, ignore
+    if (!message) return; // delivery/read receipts — ignore
 
     const from = message.from; // customer's WhatsApp number
     getSession(from).lastActive = Date.now();
 
+    // Handle interactive list/button replies
     if (message.type === "interactive") {
       const id =
         message.interactive?.list_reply?.id ||
@@ -282,8 +285,9 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
+    // Handle plain text messages
     if (message.type === "text") {
-      const body = message.text.body.trim();
+      const body    = message.text.body.trim();
       const session = getSession(from);
 
       // If a human agent is already engaged, don't auto-reply — just log.
@@ -292,9 +296,9 @@ app.post("/webhook", async (req, res) => {
       // If mid-commission flow, forward details to agent and confirm.
       if (session.stage === "commission") {
         await sendText(from, "Got it — thank you! Our team will follow up shortly with pricing and timeline.");
-        if (BUSINESS.agentNumber) {
+        if (AGENT_WHATSAPP_NUMBER) {
           await sendText(
-            BUSINESS.agentNumber,
+            AGENT_WHATSAPP_NUMBER,
             `📝 Commission enquiry from ${from}:\n"${body}"`
           );
         }
@@ -311,15 +315,19 @@ app.post("/webhook", async (req, res) => {
           "Thanks for reaching out to Shumba Crafts! 🦁 I didn't quite catch that — type 'menu' to see all options, or ask about wood, stone, metal, pottery, commissions, shipping, or payment."
         );
       }
-      return;
     }
   } catch (err) {
     console.error("Webhook handling error:", err);
   }
 });
 
-app.get("/", (req, res) => res.send("Shumba Crafts WhatsApp bot is running."));
+// ---------- Health check ----------
+app.get("/", (req, res) => res.send("Shumba Crafts WhatsApp bot is running. ✅"));
 
 app.listen(PORT, () => {
   console.log(`Shumba Crafts WhatsApp bot listening on port ${PORT}`);
+  console.log(`WHATSAPP_VERIFY_TOKEN:     ${WHATSAPP_VERIFY_TOKEN ? "✅ set" : "❌ MISSING"}`);
+  console.log(`WHATSAPP_ACCESS_TOKEN:     ${WHATSAPP_ACCESS_TOKEN ? "✅ set" : "❌ MISSING"}`);
+  console.log(`WHATSAPP_PHONE_NUMBER_ID:  ${WHATSAPP_PHONE_NUMBER_ID ? "✅ set" : "❌ MISSING"}`);
+  console.log(`AGENT_WHATSAPP_NUMBER:     ${AGENT_WHATSAPP_NUMBER ? "✅ set" : "❌ MISSING"}`);
 });
