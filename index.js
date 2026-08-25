@@ -22,7 +22,7 @@ app.use(express.json());
 
 // ---------- Config ----------
 // All variable names now match Railway environment variable names exactly.
-const WHATSAPP_VERIFY_TOKEN  = process.env.WHATSAPP_VERIFY_TOKEN;  // e.g. shumbacrafts2024
+const WHATSAPP_VERIFY_TOKEN  = process.env.shumbacrafts2024;  // e.g. shumbacrafts2024
 const WHATSAPP_ACCESS_TOKEN  = process.env.WHATSAPP_ACCESS_TOKEN;  // permanent token from Meta
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID; // from Meta API Setup
 const AGENT_WHATSAPP_NUMBER  = process.env.AGENT_WHATSAPP_NUMBER;  // e.g. 263772337808
